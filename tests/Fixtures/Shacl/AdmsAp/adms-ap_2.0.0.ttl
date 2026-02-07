@@ -1,0 +1,172 @@
+@prefix adms: <http://www.w3.org/ns/adms#> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <http://schema.org/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# ADMS-AP Application Profile SHACL Shapes
+# This is a simplified example based on ADMS-AP vocabulary structure
+
+adms:Asset
+    a sh:NodeShape ;
+    sh:targetClass adms:Asset ;
+    rdfs:label "Asset Shape"@en ;
+    rdfs:comment "An Asset is an abstract entity that reflects the intellectual content of the asset and represents those characteristics of the asset that are independent of its physical embodiment."@en ;
+    sh:property [
+        sh:path dct:title ;
+        sh:name "title"@en ;
+        sh:description "A name given to the Asset."@en ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:Literal ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dct:description ;
+        sh:name "description"@en ;
+        sh:description "A free-text account of the Asset."@en ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:Literal ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dct:publisher ;
+        sh:name "publisher"@en ;
+        sh:description "An entity responsible for making the Asset available."@en ;
+        sh:class foaf:Agent ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dct:type ;
+        sh:name "type"@en ;
+        sh:description "The type of the Asset as described in a controlled vocabulary."@en ;
+        sh:class skos:Concept ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path adms:status ;
+        sh:name "status"@en ;
+        sh:description "The status of the Asset in the context of a particular workflow process."@en ;
+        sh:class skos:Concept ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dcat:theme ;
+        sh:name "theme"@en ;
+        sh:description "The theme or sector to which the Asset applies."@en ;
+        sh:class skos:Concept ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path adms:identifier ;
+        sh:name "identifier"@en ;
+        sh:description "A unique identifier of the Asset."@en ;
+        sh:class adms:Identifier ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dct:issued ;
+        sh:name "issued"@en ;
+        sh:description "Date of formal issuance (e.g., publication) of the Asset."@en ;
+        sh:maxCount 1 ;
+        sh:or (
+            [sh:datatype xsd:date]
+            [sh:datatype xsd:dateTime]
+        ) ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dct:modified ;
+        sh:name "modified"@en ;
+        sh:description "Most recent date on which the Asset was changed, updated or modified."@en ;
+        sh:maxCount 1 ;
+        sh:or (
+            [sh:datatype xsd:date]
+            [sh:datatype xsd:dateTime]
+        ) ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dct:language ;
+        sh:name "language"@en ;
+        sh:description "The language of the Asset."@en ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dcat:contactPoint ;
+        sh:name "contact point"@en ;
+        sh:description "Links to a Contact Point for the Asset."@en ;
+        sh:class vcard:Kind ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dcat:landingPage ;
+        sh:name "landing page"@en ;
+        sh:description "A Web page that can be navigated to in a Web browser to gain access to the Asset."@en ;
+        sh:class foaf:Document ;
+        sh:severity sh:Violation ;
+    ] .
+
+adms:AssetDistribution
+    a sh:NodeShape ;
+    sh:targetClass adms:AssetDistribution ;
+    rdfs:label "Asset Distribution Shape"@en ;
+    rdfs:comment "A physical embodiment of the Asset in a particular format."@en ;
+    sh:property [
+        sh:path dcat:accessURL ;
+        sh:name "access URL"@en ;
+        sh:description "A URL of the Distribution that gives access to an Asset."@en ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dct:format ;
+        sh:name "format"@en ;
+        sh:description "The file format of the Distribution."@en ;
+        sh:class dct:MediaTypeOrExtent ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path dct:license ;
+        sh:name "license"@en ;
+        sh:description "Links to the conditions or restrictions for (re-)use of the Distribution."@en ;
+        sh:class dct:LicenseDocument ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path adms:status ;
+        sh:name "status"@en ;
+        sh:description "The status of the Distribution in the context of its development lifecycle."@en ;
+        sh:class skos:Concept ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+    ] .
+
+adms:Identifier
+    a sh:NodeShape ;
+    sh:targetClass adms:Identifier ;
+    rdfs:label "Identifier Shape"@en ;
+    rdfs:comment "A generic identifier for any kind of resource."@en ;
+    sh:property [
+        sh:path skos:notation ;
+        sh:name "notation"@en ;
+        sh:description "The notation of the identifier."@en ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:Literal ;
+        sh:severity sh:Violation ;
+    ] .

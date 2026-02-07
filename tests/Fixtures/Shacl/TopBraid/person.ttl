@@ -1,0 +1,214 @@
+# TopBraid SHACL Person Example
+# Based on TopBraid's SHACL test suite patterns
+
+@prefix ex: <http://example.org/ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# PersonShape - Main shape for validating Person instances
+ex:PersonShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    rdfs:label "Person Shape"@en ;
+    rdfs:comment "A shape for validating person data with various constraints"@en ;
+    sh:property ex:PersonShape-firstName ;
+    sh:property ex:PersonShape-lastName ;
+    sh:property ex:PersonShape-age ;
+    sh:property ex:PersonShape-email ;
+    sh:property ex:PersonShape-address ;
+    sh:property ex:PersonShape-knows ;
+    sh:property ex:PersonShape-birthDate ;
+    sh:property ex:PersonShape-gender ;
+    sh:closed false ;
+    sh:ignoredProperties ( rdf:type ) .
+
+# Property shape for firstName
+ex:PersonShape-firstName
+    a sh:PropertyShape ;
+    sh:path ex:firstName ;
+    sh:name "first name"@en ;
+    sh:description "The person's given name"@en ;
+    sh:datatype xsd:string ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:minLength 1 ;
+    sh:maxLength 100 ;
+    sh:severity sh:Violation ;
+    sh:message "First name is required and must be between 1 and 100 characters"@en .
+
+# Property shape for lastName
+ex:PersonShape-lastName
+    a sh:PropertyShape ;
+    sh:path ex:lastName ;
+    sh:name "last name"@en ;
+    sh:description "The person's family name"@en ;
+    sh:datatype xsd:string ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:minLength 1 ;
+    sh:maxLength 100 ;
+    sh:severity sh:Violation ;
+    sh:message "Last name is required and must be between 1 and 100 characters"@en .
+
+# Property shape for age
+ex:PersonShape-age
+    a sh:PropertyShape ;
+    sh:path ex:age ;
+    sh:name "age"@en ;
+    sh:description "The person's age in years"@en ;
+    sh:datatype xsd:integer ;
+    sh:maxCount 1 ;
+    sh:minInclusive 0 ;
+    sh:maxInclusive 150 ;
+    sh:severity sh:Warning ;
+    sh:message "Age must be between 0 and 150"@en .
+
+# Property shape for email
+ex:PersonShape-email
+    a sh:PropertyShape ;
+    sh:path ex:email ;
+    sh:name "email address"@en ;
+    sh:description "The person's email address"@en ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+    sh:pattern "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" ;
+    sh:flags "i" ;
+    sh:severity sh:Violation ;
+    sh:message "Email must be a valid email address"@en .
+
+# Property shape for address
+ex:PersonShape-address
+    a sh:PropertyShape ;
+    sh:path ex:address ;
+    sh:name "address"@en ;
+    sh:description "The person's physical address"@en ;
+    sh:class ex:Address ;
+    sh:maxCount 1 ;
+    sh:node ex:AddressShape ;
+    sh:severity sh:Info .
+
+# Property shape for knows (relationships to other persons)
+ex:PersonShape-knows
+    a sh:PropertyShape ;
+    sh:path ex:knows ;
+    sh:name "knows"@en ;
+    sh:description "Other persons this person knows"@en ;
+    sh:class ex:Person ;
+    sh:nodeKind sh:IRI ;
+    sh:severity sh:Info .
+
+# Property shape for birthDate
+ex:PersonShape-birthDate
+    a sh:PropertyShape ;
+    sh:path ex:birthDate ;
+    sh:name "birth date"@en ;
+    sh:description "The person's date of birth"@en ;
+    sh:or (
+        [ sh:datatype xsd:date ]
+        [ sh:datatype xsd:dateTime ]
+    ) ;
+    sh:maxCount 1 ;
+    sh:severity sh:Warning ;
+    sh:message "Birth date must be in xsd:date or xsd:dateTime format"@en .
+
+# Property shape for gender
+ex:PersonShape-gender
+    a sh:PropertyShape ;
+    sh:path ex:gender ;
+    sh:name "gender"@en ;
+    sh:description "The person's gender"@en ;
+    sh:in ( "Male" "Female" "Non-binary" "Other" "Prefer not to say" ) ;
+    sh:maxCount 1 ;
+    sh:severity sh:Info ;
+    sh:message "Gender must be one of the predefined values"@en .
+
+# AddressShape - Shape for validating Address instances
+ex:AddressShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Address ;
+    rdfs:label "Address Shape"@en ;
+    rdfs:comment "A shape for validating address data"@en ;
+    sh:property [
+        sh:path ex:street ;
+        sh:name "street"@en ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:minLength 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path ex:city ;
+        sh:name "city"@en ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:minLength 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path ex:postalCode ;
+        sh:name "postal code"@en ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:pattern "^[0-9]{4,10}$" ;
+        sh:severity sh:Warning ;
+    ] ;
+    sh:property [
+        sh:path ex:country ;
+        sh:name "country"@en ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:minLength 2 ;
+        sh:severity sh:Violation ;
+    ] .
+
+# EmployeeShape - Specialization of PersonShape for employees
+ex:EmployeeShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Employee ;
+    rdfs:label "Employee Shape"@en ;
+    rdfs:comment "A shape for validating employee data, extends PersonShape"@en ;
+    sh:node ex:PersonShape ;
+    sh:property [
+        sh:path ex:employeeId ;
+        sh:name "employee ID"@en ;
+        sh:description "Unique identifier for the employee"@en ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:pattern "^EMP[0-9]{6}$" ;
+        sh:severity sh:Violation ;
+        sh:message "Employee ID must start with 'EMP' followed by 6 digits"@en ;
+    ] ;
+    sh:property [
+        sh:path ex:department ;
+        sh:name "department"@en ;
+        sh:description "The department the employee works in"@en ;
+        sh:class ex:Department ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path ex:salary ;
+        sh:name "salary"@en ;
+        sh:description "The employee's annual salary"@en ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+    ] ;
+    sh:property [
+        sh:path ex:hireDate ;
+        sh:name "hire date"@en ;
+        sh:description "The date the employee was hired"@en ;
+        sh:datatype xsd:date ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] .
