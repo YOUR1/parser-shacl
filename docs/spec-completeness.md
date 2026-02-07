@@ -21,18 +21,18 @@ For parsing requirements, "Implemented" means the parser correctly extracts and 
 
 | Category | Parsing Coverage | Notes |
 |----------|-----------------|-------|
-| Shape recognition | ⚠️ 2 of 6 triggers | Only `rdf:type` triggers; not constraint-parameter-as-subject |
-| Target types | ⚠️ 4 of 5 | All explicit targets; no implicit class targets |
-| Core constraint parameter extraction | ✅ 28 of 28 | All constraint parameters are parsed |
-| Property paths | ⚠️ 1 of 7 | Only predicate paths (IRI); no complex paths |
-| Non-validating properties | ⚠️ 2 of 5 | sh:name, sh:description; missing sh:order, sh:group, sh:defaultValue |
-| SPARQL-based constraints | ✅ Parsed | sh:sparql, sh:select, sh:ask, prefix declarations |
+| Shape recognition | ✅ 4 of 6 triggers | `rdf:type`, target predicates (SHP-03), constraint parameters (SHP-04) |
+| Target types | ⚠️ 4 of 5 | All explicit targets with multi-value support; no implicit class targets |
+| Core constraint parameter extraction | ✅ 29 of 29 | All constraint parameters parsed incl. sh:qualifiedValueShapesDisjoint |
+| Property paths | ✅ 7 of 7 | Predicate, sequence, alternative, inverse, zeroOrMore, oneOrMore, zeroOrOne |
+| Non-validating properties | ✅ 5 of 5 | sh:name, sh:description, sh:order, sh:group, sh:defaultValue |
+| SPARQL-based constraints | ✅ Parsed | sh:sparql, sh:select, sh:ask, prefix declarations, sh:deactivated |
 | SPARQL-based constraint components | ❌ | Custom component definitions not modeled |
 | Validation process | N/A | Parser scope — no validation engine |
 | Validation report | N/A | Parser scope — no report generation |
 | Format support | ✅ 4 formats | Turtle, RDF/XML, JSON-LD, N-Triples |
 
-**Estimated overall parsing completeness: ~70%** of spec-defined constructs are extracted. All 28 core constraint parameters are parsed. Main gaps are complex property paths, implicit class targets, multi-value targets, sh:deactivated, and non-validating metadata (sh:order, sh:group, sh:defaultValue).
+**Estimated overall parsing completeness: ~88%** of spec-defined parsing constructs are extracted. All 29 core constraint parameters are parsed, all 7 property path types are supported, multi-value targets are extracted, sh:deactivated and all non-validating properties are handled. Remaining gaps: implicit class targets (TGT-07–09), SPARQL custom constraint components (Section 6).
 
 ---
 
@@ -54,12 +54,12 @@ For parsing requirements, "Implemented" means the parser correctly extracts and 
 |----|-------------|--------|-------|
 | SHP-01 | Recognize shape: SHACL instance of sh:NodeShape | ✅ | `ShaclComprehensiveTest`, `ShaclImportTest`, `ShaclW3cTestSuiteTest` |
 | SHP-02 | Recognize shape: SHACL instance of sh:PropertyShape | ✅ | `ShaclImportTest`, `ShaclParserOrConstraintTest` |
-| SHP-03 | Recognize shape: subject of sh:targetClass / sh:targetNode / sh:targetObjectsOf / sh:targetSubjectsOf | ❌ Only recognized if also typed as sh:NodeShape or sh:PropertyShape | — |
-| SHP-04 | Recognize shape: subject of a triple with a constraint parameter as predicate | ❌ | — |
+| SHP-03 | Recognize shape: subject of sh:targetClass / sh:targetNode / sh:targetObjectsOf / sh:targetSubjectsOf | ✅ Named resources with target predicates are recognized | `ShaclSpecCompletenessTest` |
+| SHP-04 | Recognize shape: subject of a triple with a constraint parameter as predicate | ✅ Named resources with constraint parameters are recognized | `ShaclSpecCompletenessTest` |
 | SHP-05 | Recognize shape: value of a shape-expecting, non-list-taking parameter (e.g. sh:node) | ❌ | — |
 | SHP-06 | Recognize shape: member of a SHACL list for shape-expecting, list-taking parameter (e.g. sh:or) | ❌ | — |
 
-**Note:** The parser identifies shapes exclusively via `rdf:type` (`sh:NodeShape` / `sh:PropertyShape`). Resources that are shapes by virtue of having constraint parameters or target declarations — without an explicit type triple — are not recognized. This is a common pragmatic simplification but differs from the spec's six recognition rules.
+**Note:** The parser now recognizes shapes via `rdf:type` (SHP-01/02), target predicates (SHP-03), and constraint parameters (SHP-04) for named resources. Blank node shapes used inline in `sh:property` blocks are handled as nested property shapes. SHP-05/06 (shapes inferred from being values of shape-expecting parameters) are not yet implemented.
 
 ---
 
@@ -93,7 +93,7 @@ For parsing requirements, "Implemented" means the parser correctly extracts and 
 |----|-------------|--------|-------|
 | TGT-01 | sh:targetNode with IRI value | ✅ | `ShaclComprehensiveTest`, `ShaclTopBraidTest` |
 | TGT-02 | sh:targetNode with literal value | ⚠️ Returns string representation; no typed literal preservation | — |
-| TGT-03 | Multiple sh:targetNode values on a single shape | ❌ Uses `get()` (returns first only), not `all()` | — |
+| TGT-03 | Multiple sh:targetNode values on a single shape | ✅ `target_nodes` array via `getResourceValues()` | `ShaclSpecCompletenessTest` |
 
 ### 5.2 Class-based Targets (sh:targetClass)
 
@@ -101,7 +101,7 @@ For parsing requirements, "Implemented" means the parser correctly extracts and 
 |----|-------------|--------|-------|
 | TGT-04 | sh:targetClass with IRI value | ✅ | `ShaclComprehensiveTest`, `ShaclImportTest`, `ShaclDcatApTest`, `ShaclW3cTestSuiteTest` |
 | TGT-05 | Target includes all SHACL instances of the class (including via rdfs:subClassOf) | N/A | — |
-| TGT-06 | Multiple sh:targetClass values on a single shape | ❌ Uses `get()` (returns first only), not `all()` | — |
+| TGT-06 | Multiple sh:targetClass values on a single shape | ✅ `target_classes` array via `getResourceValues()` | `ShaclSpecCompletenessTest` |
 
 ### 5.3 Implicit Class Targets
 
@@ -137,21 +137,21 @@ For parsing requirements, "Implemented" means the parser correctly extracts and 
 | META-02 | sh:Violation (default severity when sh:severity is unspecified) | ✅ `mapSeverity()` defaults to `'violation'` | `ShaclComprehensiveTest` |
 | META-03 | sh:Warning severity | ✅ | `ShaclImportTest`, `ShaclW3cTestSuiteTest` |
 | META-04 | sh:Info severity | ✅ | `ShaclComprehensiveTest`, `ShaclW3cTestSuiteTest` |
-| META-05 | Custom severity IRIs allowed | ❌ `mapSeverity()` maps unknown IRIs to `'violation'` | — |
+| META-05 | Custom severity IRIs allowed | ✅ `mapSeverity()` preserves custom IRIs; `severity_iri` field added | `ShaclSpecCompletenessTest` |
 
 ### 6.2 Messages (sh:message)
 
 | ID | Requirement | Status | Tests |
 |----|-------------|--------|-------|
 | META-06 | sh:message: values are xsd:string literals or literals with language tag | ✅ | `ShaclComprehensiveTest`, `ShaclTopBraidTest` |
-| META-07 | Multiple sh:message values (one per language tag recommended) | ❌ Uses `get()` (returns first only) | — |
+| META-07 | Multiple sh:message values (one per language tag recommended) | ✅ `messages` array via `getResourceValues()` | `ShaclSpecCompletenessTest` |
 | META-08 | sh:message values copied to sh:resultMessage in validation results | N/A | — |
 
 ### 6.3 Deactivation (sh:deactivated)
 
 | ID | Requirement | Status | Tests |
 |----|-------------|--------|-------|
-| META-09 | sh:deactivated: at most one value, must be true or false | ❌ Not extracted | — |
+| META-09 | sh:deactivated: at most one value, must be true or false | ✅ Extracted on shapes and property shapes | `ShaclSpecCompletenessTest` |
 | META-10 | Deactivated shape (sh:deactivated = true): all RDF terms conform | N/A | — |
 
 ---
@@ -172,7 +172,7 @@ For parsing requirements, "Implemented" means the parser correctly extracts and 
 |----|-------------|--------|-------|
 | PSH-01 | Property shape: shape that IS subject of a triple with sh:path as predicate | ✅ `sh:path` extracted for property shapes | `ShaclImportTest`, `ShaclW3cTestSuiteTest` |
 | PSH-02 | At most one value for sh:path per shape | ⚠️ Enforced implicitly by `get()` (single value) | — |
-| PSH-03 | Value of sh:path must be a well-formed SHACL property path | ❌ Not validated; only IRI paths supported | — |
+| PSH-03 | Value of sh:path must be a well-formed SHACL property path | ✅ All 7 path types parsed (predicate, sequence, alternative, inverse, zeroOrMore, oneOrMore, zeroOrOne) | `ShaclSpecCompletenessTest` |
 | PSH-04 | Node shapes and property shapes are disjoint sets | ❌ Not enforced | — |
 
 ---
@@ -181,17 +181,17 @@ For parsing requirements, "Implemented" means the parser correctly extracts and 
 
 | ID | Requirement | Status | Tests |
 |----|-------------|--------|-------|
-| PTH-01 | PredicatePath: an IRI used directly as sh:path | ✅ | All test files with `sh:path` |
-| PTH-02 | SequencePath: blank node that is a SHACL list with >= 2 members | ❌ | — |
-| PTH-03 | AlternativePath: blank node with sh:alternativePath | ❌ | — |
-| PTH-04 | InversePath: blank node with sh:inversePath | ❌ | — |
-| PTH-05 | ZeroOrMorePath: blank node with sh:zeroOrMorePath | ❌ | — |
-| PTH-06 | OneOrMorePath: blank node with sh:oneOrMorePath | ❌ | — |
-| PTH-07 | ZeroOrOnePath: blank node with sh:zeroOrOnePath | ❌ | — |
+| PTH-01 | PredicatePath: an IRI used directly as sh:path | ✅ | All test files with `sh:path`, `ShaclSpecCompletenessTest` |
+| PTH-02 | SequencePath: blank node that is a SHACL list with >= 2 members | ✅ Returns `{type: 'sequence', paths: [...]}` | `ShaclSpecCompletenessTest` |
+| PTH-03 | AlternativePath: blank node with sh:alternativePath | ✅ Returns `{type: 'alternative', paths: [...]}` | `ShaclSpecCompletenessTest` |
+| PTH-04 | InversePath: blank node with sh:inversePath | ✅ Returns `{type: 'inverse', path: ...}` | `ShaclSpecCompletenessTest` |
+| PTH-05 | ZeroOrMorePath: blank node with sh:zeroOrMorePath | ✅ Returns `{type: 'zeroOrMore', path: ...}` | `ShaclSpecCompletenessTest` |
+| PTH-06 | OneOrMorePath: blank node with sh:oneOrMorePath | ✅ Returns `{type: 'oneOrMore', path: ...}` | `ShaclSpecCompletenessTest` |
+| PTH-07 | ZeroOrOnePath: blank node with sh:zeroOrOnePath | ✅ Returns `{type: 'zeroOrOne', path: ...}` | `ShaclSpecCompletenessTest` |
 | PTH-08 | Reject recursive property paths | ❌ | — |
 | PTH-09 | Path mapping to equivalent SPARQL 1.1 property paths | ❌ | — |
 
-**Note:** Only simple predicate paths (bare IRIs) are supported. Complex property paths (sequences, alternatives, inverses, wildcards) are not parsed. This is the largest functional gap in the parser.
+**Note:** All 7 property path types are now parsed. Simple predicate paths return a string (IRI); complex paths return a structured array with `type` and `path`/`paths` keys. Recursive path detection (PTH-08) and SPARQL path mapping (PTH-09) are not yet implemented.
 
 ---
 
@@ -201,9 +201,9 @@ For parsing requirements, "Implemented" means the parser correctly extracts and 
 |----|-------------|--------|-------|
 | NVP-01 | sh:name: human-readable labels (multiple values, one per language tag) | ✅ | `ShaclComprehensiveTest`, `ShaclParserOrConstraintTest`, `ShaclTopBraidTest` |
 | NVP-02 | sh:description: human-readable descriptions (multiple values, one per language tag) | ✅ | `ShaclComprehensiveTest`, `ShaclParserOrConstraintTest`, `ShaclTopBraidTest` |
-| NVP-03 | sh:order: decimal value for relative ordering | ❌ Not extracted | — |
-| NVP-04 | sh:group: link to an sh:PropertyGroup instance | ❌ Not extracted | — |
-| NVP-05 | sh:defaultValue: single value for UI pre-population | ❌ Not extracted | — |
+| NVP-03 | sh:order: decimal value for relative ordering | ✅ | `ShaclSpecCompletenessTest` |
+| NVP-04 | sh:group: link to an sh:PropertyGroup instance | ✅ | `ShaclSpecCompletenessTest` |
+| NVP-05 | sh:defaultValue: single value for UI pre-population | ✅ | `ShaclSpecCompletenessTest` |
 | NVP-06 | Non-validating properties are ignored during validation | N/A | — |
 
 ---
@@ -312,7 +312,7 @@ For a **parser**, the key question is: "Is the constraint parameter extracted fr
 | CC-01 | Parameter: sh:class (mandatory, IRI) — **parsed** | ✅ | `ShaclComprehensiveTest`, `ShaclParserOrConstraintTest`, `ShaclDcatApTest` |
 | CC-02 | Each value node must be a SHACL instance of $class | N/A | — |
 | CC-03 | Literal value nodes always produce a validation result | N/A | — |
-| CC-04 | Multiple sh:class values = conjunction | ❌ Uses `get()` (single value only) | — |
+| CC-04 | Multiple sh:class values = conjunction | ✅ `classes` array via `getResourceValues()` | `ShaclSpecCompletenessTest` |
 
 #### sh:datatype (sh:DatatypeConstraintComponent)
 
@@ -527,7 +527,7 @@ For a **parser**, the key question is: "Is the constraint parameter extracted fr
 | CC-84 | Parameter: sh:qualifiedValueShape (mandatory, a shape) — **parsed** | ✅ | `ShaclParserAdvancedConstraintsTest` |
 | CC-85 | Optional parameter: sh:qualifiedMinCount — **parsed** | ✅ | `ShaclParserAdvancedConstraintsTest` |
 | CC-86 | Optional parameter: sh:qualifiedMaxCount — **parsed** | ✅ | `ShaclParserAdvancedConstraintsTest` |
-| CC-87 | Optional parameter: sh:qualifiedValueShapesDisjoint | ❌ Not extracted | — |
+| CC-87 | Optional parameter: sh:qualifiedValueShapesDisjoint — **parsed** | ✅ | `ShaclSpecCompletenessTest` |
 | CC-88 | Sibling shapes computation when disjoint = true | N/A | — |
 | CC-89 | Validation result if count < $qualifiedMinCount | N/A | — |
 | CC-90 | Validation result if count > $qualifiedMaxCount | N/A | — |
@@ -579,7 +579,7 @@ For a **parser**, the key question is: "Is the constraint parameter extracted fr
 | SPC-06 | sh:select must be a valid SPARQL SELECT query | ❌ Not validated (query stored as-is) | — |
 | SPC-07 | SELECT query must project the variable "this" | ❌ Not validated | — |
 | SPC-08 | sh:message on SPARQL constraints — **parsed** | ✅ | `ShaclSparqlParserTest` |
-| SPC-09 | sh:deactivated on SPARQL constraints | ❌ Not extracted | — |
+| SPC-09 | sh:deactivated on SPARQL constraints — **parsed** | ✅ | `ShaclSpecCompletenessTest` |
 
 ### 14.3 Prefix Declarations for SPARQL Queries
 
@@ -703,39 +703,39 @@ This section covers the **extension mechanism** for defining custom constraint c
 
 | Section | Total Items | ✅ Implemented | ⚠️ Partial | ❌ Not Impl | N/A |
 |---------|-------------|----------------|------------|-------------|-----|
-| 2. Shapes | 6 | 2 | 0 | 4 | 0 |
+| 2. Shapes | 6 | 4 | 0 | 2 | 0 |
 | 3. Constraints/Parameters | 5 | 1 | 3 | 0 | 1 |
-| 5. Targets | 13 | 4 | 2 | 4 | 3 |
-| 6. Metadata | 10 | 4 | 0 | 3 | 3 |
+| 5. Targets | 13 | 6 | 2 | 2 | 3 |
+| 6. Metadata | 10 | 7 | 0 | 0 | 3 |
 | 7. Node Shapes | 3 | 0 | 1 | 1 | 1 |
-| 8. Property Shapes | 4 | 1 | 1 | 2 | 0 |
-| 9. Property Paths | 9 | 1 | 0 | 8 | 0 |
-| 10. Non-Validating Props | 6 | 2 | 0 | 3 | 1 |
-| 13. Core Constraints (params) | 99 | 28 | 1 | 2 | 68 |
-| 14. SPARQL Constraints | 22 | 6 | 2 | 3 | 11 |
+| 8. Property Shapes | 4 | 2 | 1 | 1 | 0 |
+| 9. Property Paths | 9 | 7 | 0 | 2 | 0 |
+| 10. Non-Validating Props | 6 | 5 | 0 | 0 | 1 |
+| 13. Core Constraints (params) | 99 | 29 | 0 | 2 | 68 |
+| 14. SPARQL Constraints | 22 | 7 | 2 | 2 | 11 |
 | 15. SPARQL Components | 35 | 4 | 0 | 17 | 14 |
-| **Totals** | **212** | **53** | **10** | **47** | **102** |
+| **Totals** | **212** | **72** | **9** | **29** | **102** |
 
 ### Parsing-Relevant Score (excluding N/A)
 
 Of the **110 items relevant to a parser** (excluding N/A):
-- **53 fully implemented** (48%)
-- **10 partially implemented** (9%)
-- **47 not implemented** (43%)
+- **72 fully implemented** (65%)
+- **9 partially implemented** (8%)
+- **29 not implemented** (26%)
 
 ### Core Constraint Parameter Extraction (the parser's primary job)
 
-All **28 core constraint component parameters** are extracted: ✅ **100%**
+All **29 core constraint component parameters** are extracted: ✅ **100%**
 
 | Category | Parameters | Status |
 |----------|-----------|--------|
-| Value Type | sh:class, sh:datatype, sh:nodeKind | ✅ All extracted |
+| Value Type | sh:class (+ multi-value), sh:datatype, sh:nodeKind | ✅ All extracted |
 | Cardinality | sh:minCount, sh:maxCount | ✅ All extracted |
 | Value Range | sh:minExclusive, sh:minInclusive, sh:maxExclusive, sh:maxInclusive | ✅ All extracted |
 | String-based | sh:minLength, sh:maxLength, sh:pattern, sh:flags, sh:languageIn, sh:uniqueLang | ✅ All extracted |
 | Property Pair | sh:equals, sh:disjoint, sh:lessThan, sh:lessThanOrEquals | ✅ All extracted |
 | Logical | sh:not, sh:and, sh:or, sh:xone | ✅ All extracted |
-| Shape-based | sh:node, sh:property, sh:qualifiedValueShape, sh:qualifiedMinCount, sh:qualifiedMaxCount | ✅ All extracted |
+| Shape-based | sh:node, sh:property, sh:qualifiedValueShape, sh:qualifiedMinCount, sh:qualifiedMaxCount, sh:qualifiedValueShapesDisjoint | ✅ All extracted |
 | Other | sh:closed, sh:ignoredProperties, sh:hasValue, sh:in | ✅ All extracted |
 | SPARQL | sh:sparql, sh:select, sh:ask | ✅ All extracted |
 
@@ -743,15 +743,25 @@ All **28 core constraint component parameters** are extracted: ✅ **100%**
 
 | Gap | Impact | Spec Items |
 |-----|--------|------------|
-| Complex property paths (sequence, alternative, inverse, wildcards) | High — affects real-world profiles using path expressions | PTH-02 through PTH-09 |
 | Implicit class targets (shape is also rdfs:Class) | Medium — some profiles use this pattern | TGT-07 through TGT-09 |
-| Multi-value targets (multiple sh:targetClass / sh:targetNode per shape) | Medium — `get()` returns first value only | TGT-03, TGT-06, CC-04 |
-| sh:deactivated extraction | Low — rarely used in practice | META-09, SPC-09 |
-| sh:order, sh:group, sh:defaultValue | Low — UI metadata, not structural | NVP-03 through NVP-05 |
-| sh:qualifiedValueShapesDisjoint | Low — advanced qualified shapes feature | CC-87 |
-| Custom severity IRIs | Low — nearly all profiles use built-in severities | META-05 |
-| Shape recognition by constraint predicates (without rdf:type) | Low — most profiles explicitly type their shapes | SHP-03 through SHP-06 |
+| Recursive property path rejection | Low — rarely encountered in practice | PTH-08 |
+| Path-to-SPARQL mapping | Low — only needed for validation | PTH-09 |
+| Shape recognition via shape-expecting parameter values (SHP-05/06) | Low — most profiles explicitly type their shapes | SHP-05, SHP-06 |
 | SPARQL-based custom constraint components | Low — extension mechanism, rarely used in basic profiles | SCC-01 through SCC-35 |
+
+### Previously Resolved Gaps (now implemented)
+
+| Feature | Spec Items | Tests |
+|---------|------------|-------|
+| Complex property paths (all 7 types) | PTH-01 through PTH-07 | `ShaclSpecCompletenessTest` |
+| Multi-value targets (sh:targetClass, sh:targetNode) | TGT-03, TGT-06 | `ShaclSpecCompletenessTest` |
+| Multiple sh:class values | CC-04 | `ShaclSpecCompletenessTest` |
+| Multiple sh:message values | META-07 | `ShaclSpecCompletenessTest` |
+| sh:deactivated extraction (shapes, property shapes, SPARQL) | META-09, SPC-09 | `ShaclSpecCompletenessTest` |
+| sh:order, sh:group, sh:defaultValue | NVP-03 through NVP-05 | `ShaclSpecCompletenessTest` |
+| sh:qualifiedValueShapesDisjoint | CC-87 | `ShaclSpecCompletenessTest` |
+| Custom severity IRIs | META-05 | `ShaclSpecCompletenessTest` |
+| Shape recognition by target/constraint predicates | SHP-03, SHP-04 | `ShaclSpecCompletenessTest` |
 
 ---
 
@@ -759,26 +769,30 @@ All **28 core constraint component parameters** are extracted: ✅ **100%**
 
 | Feature Area | Test Files | Coverage Quality |
 |-------------|-----------|-----------------|
-| Shape parsing (NodeShape, PropertyShape) | All 11 test files | Excellent |
-| sh:targetClass | 8 test files | Excellent |
-| sh:targetNode | 2 test files | Good |
+| Shape parsing (NodeShape, PropertyShape) | All 12 test files | Excellent |
+| Shape recognition (SHP-03, SHP-04) | `ShaclSpecCompletenessTest` | Good |
+| sh:targetClass (single + multi-value) | 9 test files | Excellent |
+| sh:targetNode (single + multi-value) | 3 test files | Good |
 | sh:targetSubjectsOf | 1 test file | Basic |
 | sh:targetObjectsOf | 3 test files | Good |
 | Cardinality (minCount, maxCount) | 5 test files | Good |
 | String constraints (minLength, maxLength, pattern) | 5 test files | Good |
-| Value range (min/maxInclusive, min/maxExclusive) | 3 test files | Good |
-| Value type (datatype, nodeKind, class) | 6 test files | Good |
+| Value range (min/maxInclusive, min/maxExclusive) | 4 test files | Good |
+| Value type (datatype, nodeKind, class, multi-class) | 7 test files | Good |
 | Logical constraints (and, or, xone) | 3 test files | Good |
 | sh:not | 0 dedicated tests | Gap — extracted in code but not directly tested |
 | sh:in / sh:hasValue / sh:languageIn / sh:uniqueLang | 1-2 test files each | Basic |
 | Property pair constraints | 1 test file | Basic |
-| Qualified value shapes | 1 test file | Basic |
+| Qualified value shapes (incl. disjoint) | 2 test files | Good |
 | Closed shapes | 2 test files | Good |
-| Severity levels | 4 test files | Good |
-| sh:message | 4 test files | Good |
+| Severity levels (incl. custom IRIs) | 5 test files | Good |
+| sh:message (single + multi-value) | 5 test files | Good |
 | sh:name / sh:description | 3 test files | Good |
+| sh:order / sh:group / sh:defaultValue | `ShaclSpecCompletenessTest` | Good |
+| sh:deactivated (shapes, properties, SPARQL) | `ShaclSpecCompletenessTest` | Good |
+| Property paths (all 7 types) | `ShaclSpecCompletenessTest` | Good |
 | Multilingual labels/descriptions | 4 test files | Good |
-| SPARQL constraints | 1 test file (8 methods) | Good |
+| SPARQL constraints (incl. deactivated) | 2 test files | Good |
 | Prefix extraction | 4 test files | Good |
 | Format detection | 1 test file | Basic |
 | Real-world profiles (DCAT-AP, ADMS-AP, NL-SBB, TopBraid, W3C) | 5 test files | Excellent |
@@ -788,5 +802,5 @@ All **28 core constraint component parameters** are extracted: ✅ **100%**
 ## Notes
 
 - Spec version: W3C Recommendation 20 July 2017
-- Analysis based on source code in `src/Services/Ontology/Parsers/ShaclParser.php` (1020 lines), `src/Services/Ontology/Shacl/ShaclPropertyExtractor.php`, `src/Services/Ontology/Shacl/ShaclShapeProcessor.php`, and 11 test files
+- Analysis based on source code in `src/Services/Ontology/Parsers/ShaclParser.php`, `src/Services/Ontology/Shacl/ShaclPropertyExtractor.php`, `src/Services/Ontology/Shacl/ShaclShapeProcessor.php`, and 12 test files (94 tests, 635 assertions)
 - The parser successfully handles 5 real-world SHACL application profiles (DCAT-AP 2.1.1, ADMS-AP 2.0.0, SKOS-AP-NL, TopBraid examples, W3C test suite examples)
