@@ -181,6 +181,99 @@ class ShaclParser implements OntologyParserInterface
     }
 
     /**
+     * Known SHACL constraint parameter predicates (for shape recognition via SHP-03/SHP-04)
+     */
+    protected const CONSTRAINT_PARAMETERS = [
+        'http://www.w3.org/ns/shacl#class',
+        'http://www.w3.org/ns/shacl#datatype',
+        'http://www.w3.org/ns/shacl#nodeKind',
+        'http://www.w3.org/ns/shacl#minCount',
+        'http://www.w3.org/ns/shacl#maxCount',
+        'http://www.w3.org/ns/shacl#minExclusive',
+        'http://www.w3.org/ns/shacl#minInclusive',
+        'http://www.w3.org/ns/shacl#maxExclusive',
+        'http://www.w3.org/ns/shacl#maxInclusive',
+        'http://www.w3.org/ns/shacl#minLength',
+        'http://www.w3.org/ns/shacl#maxLength',
+        'http://www.w3.org/ns/shacl#pattern',
+        'http://www.w3.org/ns/shacl#languageIn',
+        'http://www.w3.org/ns/shacl#uniqueLang',
+        'http://www.w3.org/ns/shacl#equals',
+        'http://www.w3.org/ns/shacl#disjoint',
+        'http://www.w3.org/ns/shacl#lessThan',
+        'http://www.w3.org/ns/shacl#lessThanOrEquals',
+        'http://www.w3.org/ns/shacl#not',
+        'http://www.w3.org/ns/shacl#and',
+        'http://www.w3.org/ns/shacl#or',
+        'http://www.w3.org/ns/shacl#xone',
+        'http://www.w3.org/ns/shacl#node',
+        'http://www.w3.org/ns/shacl#property',
+        'http://www.w3.org/ns/shacl#qualifiedValueShape',
+        'http://www.w3.org/ns/shacl#closed',
+        'http://www.w3.org/ns/shacl#hasValue',
+        'http://www.w3.org/ns/shacl#in',
+        'http://www.w3.org/ns/shacl#sparql',
+    ];
+
+    /**
+     * SHACL target predicates (for shape recognition via SHP-03)
+     */
+    protected const TARGET_PREDICATES = [
+        'http://www.w3.org/ns/shacl#targetClass',
+        'http://www.w3.org/ns/shacl#targetNode',
+        'http://www.w3.org/ns/shacl#targetSubjectsOf',
+        'http://www.w3.org/ns/shacl#targetObjectsOf',
+    ];
+
+    /**
+     * Determine if a resource is a SHACL shape using the spec's recognition rules (Section 2.1).
+     *
+     * For SHP-03 (target predicates) and SHP-04 (constraint parameters), only named resources
+     * (IRIs) are recognized as top-level shapes. Blank node shapes that appear inline within
+     * sh:property are already handled by extractShapeProperties().
+     */
+    protected function isShape($resource): bool
+    {
+        // SHP-01/SHP-02: SHACL instance of sh:NodeShape or sh:PropertyShape
+        $types = $resource->all('rdf:type');
+        foreach ($types as $type) {
+            if (! method_exists($type, 'getUri')) {
+                continue;
+            }
+            $typeUri = $type->getUri();
+            if ($typeUri === 'http://www.w3.org/ns/shacl#NodeShape' ||
+                $typeUri === 'http://www.w3.org/ns/shacl#PropertyShape') {
+                return true;
+            }
+        }
+
+        // SHP-03/SHP-04 only apply to named resources (not blank nodes).
+        // Blank node shapes inside sh:property blocks are handled as nested property shapes.
+        $uri = $resource->getUri();
+        if (! $uri || str_starts_with($uri, '_:')) {
+            return false;
+        }
+
+        // SHP-03: Subject of a target predicate
+        foreach (self::TARGET_PREDICATES as $targetPred) {
+            $shortForm = str_replace('http://www.w3.org/ns/shacl#', 'sh:', $targetPred);
+            if ($resource->get($shortForm) !== null) {
+                return true;
+            }
+        }
+
+        // SHP-04: Subject of a triple with a constraint parameter as predicate
+        foreach (self::CONSTRAINT_PARAMETERS as $param) {
+            $shortForm = str_replace('http://www.w3.org/ns/shacl#', 'sh:', $param);
+            if ($resource->get($shortForm) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Extract SHACL shapes from the graph
      */
     protected function extractShaclShapes(Graph $graph): array
@@ -189,23 +282,7 @@ class ShaclParser implements OntologyParserInterface
 
         // Find all resources that are SHACL shapes
         foreach ($graph->resources() as $resource) {
-            $types = $resource->all('rdf:type');
-            $isShape = false;
-
-            foreach ($types as $type) {
-                if (! method_exists($type, 'getUri')) {
-                    continue;
-                }
-                $typeUri = $type->getUri();
-                if ($typeUri === 'http://www.w3.org/ns/shacl#NodeShape' ||
-                    $typeUri === 'http://www.w3.org/ns/shacl#PropertyShape') {
-                    $isShape = true;
-                    break;
-                }
-
-            }
-
-            if (! $isShape) {
+            if (! $this->isShape($resource)) {
                 continue;
             }
 
@@ -216,6 +293,7 @@ class ShaclParser implements OntologyParserInterface
 
             $labels = $this->getAllResourceLabels($resource);
             $descriptions = $this->getAllResourceComments($resource);
+            $rawSeverity = $this->getResourceValue($resource, 'sh:severity');
             $shape = [
                 'uri' => $uri,
                 'label' => $this->getResourceLabel($resource),
@@ -223,14 +301,19 @@ class ShaclParser implements OntologyParserInterface
                 'description' => $this->getResourceComment($resource),
                 'descriptions' => $descriptions,
                 'target_class' => $this->getResourceValue($resource, 'sh:targetClass'),
+                'target_classes' => $this->getResourceValues($resource, 'sh:targetClass'),
                 'target_node' => $this->getResourceValue($resource, 'sh:targetNode'),
+                'target_nodes' => $this->getResourceValues($resource, 'sh:targetNode'),
                 'target_subjects_of' => $this->getResourceValue($resource, 'sh:targetSubjectsOf'),
                 'target_objects_of' => $this->getResourceValue($resource, 'sh:targetObjectsOf'),
                 'target_property' => $this->getResourceValue($resource, 'sh:path'),
                 'property_shapes' => $this->extractShapeProperties($resource),
                 'constraints' => $this->extractShapeConstraints($resource),
-                'severity' => $this->mapSeverity($this->getResourceValue($resource, 'sh:severity') ?? 'sh:Violation'),
+                'severity' => $this->mapSeverity($rawSeverity ?? 'sh:Violation'),
+                'severity_iri' => $rawSeverity,
                 'message' => $this->getResourceValue($resource, 'sh:message'),
+                'messages' => $this->getResourceValues($resource, 'sh:message'),
+                'deactivated' => $this->getResourceValue($resource, 'sh:deactivated'),
                 // Logical constraints
                 'sh_and' => $this->extractLogicalConstraint($resource, 'sh:and'),
                 'sh_or' => $this->extractLogicalConstraint($resource, 'sh:or'),
@@ -286,7 +369,9 @@ class ShaclParser implements OntologyParserInterface
                 continue;
             }
             foreach ($shape['property_shapes'] as $propertyShape) {
-                if (! (! empty($propertyShape['path']) && ! in_array($propertyShape['path'], $propertyUris))) {
+                $path = $propertyShape['path'] ?? null;
+                // Skip complex paths (arrays) for property extraction — they don't have a single URI
+                if (empty($path) || is_array($path) || in_array($path, $propertyUris)) {
                     continue;
                 }
                 // Only include properties that have meaningful constraints or custom descriptions
@@ -294,8 +379,8 @@ class ShaclParser implements OntologyParserInterface
                     continue; // Skip properties without meaningful constraints
                 }
 
-                $propertyUris[] = $propertyShape['path'];
-                $localName = $this->extractLocalName($propertyShape['path']);
+                $propertyUris[] = $path;
+                $localName = $this->extractLocalName($path);
 
                 // Determine property type from constraints
                 $propertyType = $this->determinePropertyTypeFromShape($propertyShape);
@@ -478,7 +563,7 @@ class ShaclParser implements OntologyParserInterface
             $labels = $this->getAllResourceLabels($propertyShape);
             $descriptions = $this->getAllResourceComments($propertyShape);
             $property = [
-                'path' => $this->getResourceValue($propertyShape, 'sh:path'),
+                'path' => $this->extractPropertyPath($propertyShape),
                 'datatype' => $this->getResourceValue($propertyShape, 'sh:datatype'),
                 'nodeKind' => $this->getResourceValue($propertyShape, 'sh:nodeKind'),
                 'minCount' => $this->getResourceValue($propertyShape, 'sh:minCount'),
@@ -488,12 +573,25 @@ class ShaclParser implements OntologyParserInterface
                 'pattern' => $this->getResourceValue($propertyShape, 'sh:pattern'),
                 'flags' => $this->getResourceValue($propertyShape, 'sh:flags'),
                 'class' => $this->getResourceValue($propertyShape, 'sh:class'),
+                'classes' => $this->getResourceValues($propertyShape, 'sh:class'),
                 'node' => $this->getResourceValue($propertyShape, 'sh:node'),
                 'message' => $this->getResourceValue($propertyShape, 'sh:message'),
+                'messages' => $this->getResourceValues($propertyShape, 'sh:message'),
                 'name' => $this->getResourceValue($propertyShape, 'sh:name'),
                 'description' => $this->getResourceValue($propertyShape, 'sh:description'),
                 'labels' => $labels,
                 'descriptions' => $descriptions,
+                // Non-validating properties
+                'order' => $this->getResourceValue($propertyShape, 'sh:order'),
+                'group' => $this->getResourceValue($propertyShape, 'sh:group'),
+                'defaultValue' => $this->getResourceValue($propertyShape, 'sh:defaultValue'),
+                // Deactivation
+                'deactivated' => $this->getResourceValue($propertyShape, 'sh:deactivated'),
+                // Value range constraints
+                'minExclusive' => $this->getResourceValue($propertyShape, 'sh:minExclusive'),
+                'minInclusive' => $this->getResourceValue($propertyShape, 'sh:minInclusive'),
+                'maxExclusive' => $this->getResourceValue($propertyShape, 'sh:maxExclusive'),
+                'maxInclusive' => $this->getResourceValue($propertyShape, 'sh:maxInclusive'),
                 // Value constraints
                 'hasValue' => $this->getResourceValue($propertyShape, 'sh:hasValue'),
                 'in' => $this->extractRdfList($propertyShape, 'sh:in'),
@@ -508,6 +606,7 @@ class ShaclParser implements OntologyParserInterface
                 'qualifiedValueShape' => $this->getResourceValue($propertyShape, 'sh:qualifiedValueShape'),
                 'qualifiedMinCount' => $this->getResourceValue($propertyShape, 'sh:qualifiedMinCount'),
                 'qualifiedMaxCount' => $this->getResourceValue($propertyShape, 'sh:qualifiedMaxCount'),
+                'qualifiedValueShapesDisjoint' => $this->getResourceValue($propertyShape, 'sh:qualifiedValueShapesDisjoint'),
                 // Logical constraints
                 'sh_or' => $this->extractLogicalConstraintWithClasses($propertyShape, 'sh:or'),
                 'sh_and' => $this->extractLogicalConstraintWithClasses($propertyShape, 'sh:and'),
@@ -516,8 +615,11 @@ class ShaclParser implements OntologyParserInterface
                 'sparql_constraints' => $this->extractSparqlConstraints($propertyShape),
             ];
 
-            if (! empty($property['path'])) {
-                $properties[] = array_filter($property); // Remove null values
+            // For predicate paths (string), use existing check; for complex paths (array), always include
+            $pathValue = $property['path'];
+            if (! empty($pathValue)) {
+                // Use strict filter to preserve falsy values like '0' and 'false'
+                $properties[] = array_filter($property, fn ($v) => $v !== null && $v !== '' && $v !== []);
             }
         }
 
@@ -535,6 +637,7 @@ class ShaclParser implements OntologyParserInterface
             'sh:hasValue', 'sh:languageIn', 'sh:uniqueLang',
             'sh:equals', 'sh:disjoint', 'sh:lessThan', 'sh:lessThanOrEquals',
             'sh:qualifiedValueShape', 'sh:qualifiedMinCount', 'sh:qualifiedMaxCount',
+            'sh:qualifiedValueShapesDisjoint',
             'sh:closed',
         ];
 
@@ -606,7 +709,8 @@ class ShaclParser implements OntologyParserInterface
     }
 
     /**
-     * Map SHACL severity URIs to simple string values
+     * Map SHACL severity URIs to simple string values.
+     * Built-in severities map to canonical names; custom IRIs are preserved as-is.
      */
     protected function mapSeverity(?string $shaclSeverity): string
     {
@@ -614,12 +718,12 @@ class ShaclParser implements OntologyParserInterface
             return 'violation';
         }
 
-        // Handle both URI and simple forms
+        // Handle both URI and simple forms for built-in severities
         return match ($shaclSeverity) {
             'sh:Violation', 'http://www.w3.org/ns/shacl#Violation' => 'violation',
             'sh:Warning', 'http://www.w3.org/ns/shacl#Warning' => 'warning',
             'sh:Info', 'http://www.w3.org/ns/shacl#Info' => 'info',
-            default => 'violation'
+            default => $shaclSeverity
         };
     }
 
@@ -754,6 +858,140 @@ class ShaclParser implements OntologyParserInterface
 
         // If it's only about constraints/validation without proper documentation, it's not semantic
         return false;
+    }
+
+    /**
+     * Extract a SHACL property path from a property shape resource.
+     * Handles predicate paths (IRIs) and complex paths (sequence, alternative, inverse, wildcards).
+     * Returns a string for simple predicate paths, or an array for complex paths.
+     *
+     * @return string|array|null
+     */
+    protected function extractPropertyPath($propertyShape)
+    {
+        $pathResource = $propertyShape->get('sh:path');
+        if (! $pathResource) {
+            return null;
+        }
+
+        return $this->parsePathResource($pathResource);
+    }
+
+    /**
+     * Recursively parse a path resource into a structured representation.
+     *
+     * @return string|array|null
+     */
+    protected function parsePathResource($pathResource)
+    {
+        if (! $pathResource) {
+            return null;
+        }
+
+        // Simple predicate path: the path is an IRI
+        if (method_exists($pathResource, 'getUri') && $pathResource->getUri()
+            && ! str_starts_with($pathResource->getUri(), '_:')) {
+            return $pathResource->getUri();
+        }
+
+        // Complex path: blank node with specific sh: property
+        // InversePath
+        $inverse = $pathResource->get('sh:inversePath');
+        if ($inverse) {
+            return [
+                'type' => 'inverse',
+                'path' => $this->parsePathResource($inverse),
+            ];
+        }
+
+        // AlternativePath
+        $alt = $pathResource->get('sh:alternativePath');
+        if ($alt) {
+            $members = $this->extractPathList($alt);
+
+            return [
+                'type' => 'alternative',
+                'paths' => $members,
+            ];
+        }
+
+        // ZeroOrMorePath
+        $zeroOrMore = $pathResource->get('sh:zeroOrMorePath');
+        if ($zeroOrMore) {
+            return [
+                'type' => 'zeroOrMore',
+                'path' => $this->parsePathResource($zeroOrMore),
+            ];
+        }
+
+        // OneOrMorePath
+        $oneOrMore = $pathResource->get('sh:oneOrMorePath');
+        if ($oneOrMore) {
+            return [
+                'type' => 'oneOrMore',
+                'path' => $this->parsePathResource($oneOrMore),
+            ];
+        }
+
+        // ZeroOrOnePath
+        $zeroOrOne = $pathResource->get('sh:zeroOrOnePath');
+        if ($zeroOrOne) {
+            return [
+                'type' => 'zeroOrOne',
+                'path' => $this->parsePathResource($zeroOrOne),
+            ];
+        }
+
+        // SequencePath: a blank node that is an RDF list (has rdf:first)
+        $first = $pathResource->get('rdf:first');
+        if ($first) {
+            $members = $this->extractPathList($pathResource);
+            if (count($members) >= 2) {
+                return [
+                    'type' => 'sequence',
+                    'paths' => $members,
+                ];
+            }
+        }
+
+        // Fallback: try to get URI anyway (some parsers may present paths differently)
+        if (method_exists($pathResource, 'getUri') && $pathResource->getUri()) {
+            return $pathResource->getUri();
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract members of a path list (RDF list of path resources)
+     */
+    protected function extractPathList($listResource): array
+    {
+        $members = [];
+        $current = $listResource;
+
+        while ($current) {
+            if (method_exists($current, 'getUri') &&
+                $current->getUri() === 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil') {
+                break;
+            }
+
+            $first = $current->get('rdf:first');
+            if ($first) {
+                $parsed = $this->parsePathResource($first);
+                if ($parsed !== null) {
+                    $members[] = $parsed;
+                }
+            }
+
+            $rest = $current->get('rdf:rest');
+            if (! $rest) {
+                break;
+            }
+            $current = $rest;
+        }
+
+        return $members;
     }
 
     /**
@@ -987,6 +1225,7 @@ class ShaclParser implements OntologyParserInterface
             'query' => $query,
             'prefixes' => $this->extractPrefixesFromSparqlConstraint($sparqlResource),
             'message' => $this->getResourceValue($sparqlResource, 'sh:message'),
+            'deactivated' => $this->getResourceValue($sparqlResource, 'sh:deactivated'),
         ];
     }
 
