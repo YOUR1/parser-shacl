@@ -1,19 +1,18 @@
 <?php
 
 use App\Services\Ontology\Parsers\ShaclParser;
-use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     $this->parser = new ShaclParser;
 
-    // Load the actual NL-SBB SHACL content for testing
-    $response = Http::get('https://raw.githubusercontent.com/geonovum/NL-SBB/main/profiles/skos-ap-nl.ttl');
+    // Use local fixture to keep tests deterministic and framework-agnostic.
+    $fixturePath = __DIR__.'/../../../Fixtures/Shacl/NlSbb/skos-ap-nl.ttl';
 
-    if (! $response->successful()) {
-        $this->fail('Could not load NL-SBB SHACL content for testing');
+    if (! file_exists($fixturePath)) {
+        $this->markTestSkipped('Could not load NL-SBB SHACL fixture');
     }
 
-    $this->shaclContent = $response->body();
+    $this->shaclContent = file_get_contents($fixturePath);
 });
 
 test('it does not extract classes from shacl shapes directly', function () {
