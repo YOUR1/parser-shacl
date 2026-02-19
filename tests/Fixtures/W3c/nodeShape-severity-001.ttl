@@ -1,0 +1,34 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:ViolationShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:severity sh:Violation ;
+    rdfs:label "Violation Shape" ;
+    sh:property [
+        sh:path ex:name ;
+        sh:datatype xsd:string ;
+    ] .
+
+ex:WarningShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Animal ;
+    sh:severity sh:Warning ;
+    rdfs:label "Warning Shape" ;
+    sh:property [
+        sh:path ex:species ;
+        sh:datatype xsd:string ;
+    ] .
+
+ex:InfoShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Document ;
+    sh:severity sh:Info ;
+    rdfs:label "Info Shape" ;
+    sh:property [
+        sh:path ex:title ;
+        sh:datatype xsd:string ;
+    ] .

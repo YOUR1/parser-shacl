@@ -1,0 +1,26 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:FullShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    rdfs:label "Full Shape" ;
+    sh:property [
+        sh:path ex:firstName ;
+        sh:name "first name" ;
+        sh:description "The given name" ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:minLength 1 ;
+        sh:maxLength 50 ;
+    ] ;
+    sh:property [
+        sh:path ex:age ;
+        sh:name "age" ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 150 ;
+    ] .

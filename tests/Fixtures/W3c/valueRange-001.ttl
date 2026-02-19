@@ -1,0 +1,19 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:ValueRangeShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Measurement ;
+    sh:property [
+        sh:path ex:temperature ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive -273.15 ;
+        sh:maxInclusive 1000 ;
+    ] ;
+    sh:property [
+        sh:path ex:score ;
+        sh:datatype xsd:integer ;
+        sh:minExclusive 0 ;
+        sh:maxExclusive 100 ;
+    ] .

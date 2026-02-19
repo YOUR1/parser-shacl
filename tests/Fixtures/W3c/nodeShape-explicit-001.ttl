@@ -1,0 +1,9 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:ExplicitShape
+    a sh:NodeShape ;
+    rdfs:label "Explicit Node Shape" ;
+    rdfs:comment "A shape with explicit sh:NodeShape type" ;
+    sh:targetClass ex:Thing .

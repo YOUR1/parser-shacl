@@ -1,0 +1,18 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:OrShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Event ;
+    sh:property [
+        sh:path ex:date ;
+        sh:or (
+            [
+                sh:datatype xsd:date ;
+            ]
+            [
+                sh:datatype xsd:dateTime ;
+            ]
+        ) ;
+    ] .

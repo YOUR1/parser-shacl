@@ -1,0 +1,25 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:PairShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [
+        sh:path ex:email ;
+        sh:equals ex:primaryEmail ;
+    ] ;
+    sh:property [
+        sh:path ex:nickname ;
+        sh:disjoint ex:name ;
+    ] ;
+    sh:property [
+        sh:path ex:startDate ;
+        sh:datatype xsd:date ;
+        sh:lessThan ex:endDate ;
+    ] ;
+    sh:property [
+        sh:path ex:minAge ;
+        sh:datatype xsd:integer ;
+        sh:lessThanOrEquals ex:maxAge ;
+    ] .

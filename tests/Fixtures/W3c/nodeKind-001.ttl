@@ -1,0 +1,18 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+
+ex:ResourceShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Resource ;
+    sh:property [
+        sh:path ex:identifier ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path ex:label ;
+        sh:nodeKind sh:Literal ;
+    ] ;
+    sh:property [
+        sh:path ex:related ;
+        sh:nodeKind sh:BlankNodeOrIRI ;
+    ] .

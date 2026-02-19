@@ -1,0 +1,18 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:XoneShape
+    a sh:NodeShape ;
+    sh:targetClass ex:Contact ;
+    sh:property [
+        sh:path ex:identifier ;
+        sh:xone (
+            [
+                sh:datatype xsd:string ;
+            ]
+            [
+                sh:datatype xsd:integer ;
+            ]
+        ) ;
+    ] .
