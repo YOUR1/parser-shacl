@@ -214,7 +214,7 @@ describe('SHACL Application Profile Integration - NL-SBB SKOS-AP-NL', function (
         expect($result->shapes)->toHaveKey($srcDocUri);
 
         $shape = $result->shapes[$srcDocUri];
-        expect($shape['target_objects_of'])->toBe('http://purl.org/dc/terms/source');
+        expect($shape['target_objects_of'])->toBe(['http://purl.org/dc/terms/source']);
         expect($shape['label'])->toBe('Brondocument');
     });
 

@@ -190,6 +190,67 @@ TTL;
             ]);
         });
 
+        // ============================================================================
+        // Story 14.3: Nested Property Paths
+        // ============================================================================
+
+        it('extracts inverse path wrapping alternative path (nested)', function () {
+            $turtle = <<<'TTL'
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+ex:PersonShape a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [
+        sh:path [ sh:inversePath [ sh:alternativePath ( ex:knows ex:likes ) ] ] ;
+    ] .
+TTL;
+            $shapes = extractPropertyShapesFromTurtle($turtle);
+            $ps = $shapes['http://example.org/PersonShape']['property_shapes'];
+            expect($ps)->toHaveCount(1);
+            expect($ps[0]['path'])->toBeArray();
+            expect($ps[0]['path']['type'])->toBe('inverse');
+            expect($ps[0]['path']['path'])->toBeArray();
+            expect($ps[0]['path']['path']['type'])->toBe('alternative');
+            expect($ps[0]['path']['path']['paths'])->toBe(['http://example.org/knows', 'http://example.org/likes']);
+        });
+
+        it('extracts zeroOrMore path wrapping inverse path (nested)', function () {
+            $turtle = <<<'TTL'
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+ex:PersonShape a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [
+        sh:path [ sh:zeroOrMorePath [ sh:inversePath ex:parent ] ] ;
+    ] .
+TTL;
+            $shapes = extractPropertyShapesFromTurtle($turtle);
+            $ps = $shapes['http://example.org/PersonShape']['property_shapes'];
+            expect($ps)->toHaveCount(1);
+            expect($ps[0]['path'])->toBeArray();
+            expect($ps[0]['path']['type'])->toBe('zeroOrMore');
+            expect($ps[0]['path']['path'])->toBeArray();
+            expect($ps[0]['path']['path']['type'])->toBe('inverse');
+            expect($ps[0]['path']['path']['path'])->toBe('http://example.org/parent');
+        });
+
+        it('extracts oneOrMore path wrapping a direct URI', function () {
+            $turtle = <<<'TTL'
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+ex:PersonShape a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [
+        sh:path [ sh:oneOrMorePath ex:parent ] ;
+    ] .
+TTL;
+            $shapes = extractPropertyShapesFromTurtle($turtle);
+            $ps = $shapes['http://example.org/PersonShape']['property_shapes'];
+            expect($ps)->toHaveCount(1);
+            expect($ps[0]['path']['type'])->toBe('oneOrMore');
+            expect($ps[0]['path']['path'])->toBe('http://example.org/parent');
+        });
+
         it('excludes property shapes with empty path', function () {
             $turtle = <<<'TTL'
 @prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -797,6 +858,51 @@ TTL;
             $shapes = extractPropertyShapesFromTurtle($turtle);
             $ps = $shapes['http://example.org/PersonShape']['property_shapes'][0];
             expect($ps)->not->toHaveKey('sh_not');
+        });
+    });
+
+    // ============================================================================
+    // Story 14.4: SPARQL Constraints on Property Shapes
+    // ============================================================================
+
+    describe('SPARQL constraints on property shapes', function () {
+
+        it('extracts sh:sparql constraint from property shape', function () {
+            $turtle = <<<'TTL'
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+ex:PersonShape a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [
+        sh:path ex:name ;
+        sh:sparql [
+            sh:select "SELECT $this ?value WHERE { $this ex:name ?value . FILTER (strlen(?value) > 100) }" ;
+            sh:message "Name too long"@en ;
+        ] ;
+    ] .
+TTL;
+            $shapes = extractPropertyShapesFromTurtle($turtle);
+            $ps = $shapes['http://example.org/PersonShape']['property_shapes'][0];
+            expect($ps)->toHaveKey('sparql_constraints');
+            expect($ps['sparql_constraints'])->toBeArray();
+            expect($ps['sparql_constraints'])->toHaveCount(1);
+            expect($ps['sparql_constraints'][0])->toHaveKey('select');
+            expect($ps['sparql_constraints'][0]['select'])->toContain('SELECT');
+            expect($ps['sparql_constraints'][0]['messages'])->toHaveKey('en');
+            expect($ps['sparql_constraints'][0]['messages']['en'])->toBe('Name too long');
+        });
+
+        it('omits sparql_constraints key when no sh:sparql present', function () {
+            $turtle = <<<'TTL'
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ex:PersonShape a sh:NodeShape ;
+    sh:property [ sh:path ex:name ; sh:datatype xsd:string ] .
+TTL;
+            $shapes = extractPropertyShapesFromTurtle($turtle);
+            $ps = $shapes['http://example.org/PersonShape']['property_shapes'][0];
+            expect($ps)->not->toHaveKey('sparql_constraints');
         });
     });
 

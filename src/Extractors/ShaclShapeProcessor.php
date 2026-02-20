@@ -21,6 +21,7 @@ use Youri\vandenBogert\Software\ParserCore\ValueObjects\ParsedRdf;
 final class ShaclShapeProcessor
 {
     private const string SHACL_NS = 'http://www.w3.org/ns/shacl#';
+    private const string RDF_NIL = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil';
 
     /** @var list<string> */
     private const array TARGET_PREDICATES = [
@@ -88,8 +89,18 @@ final class ShaclShapeProcessor
         'http://www.w3.org/ns/shacl#Info' => 'info',
     ];
 
+    /** @var list<string> Shape-expecting predicates whose URI values are implicit shapes */
+    private const array SHAPE_EXPECTING_PREDICATES = [
+        'sh:node',
+        'sh:qualifiedValueShape',
+    ];
+
     /**
      * Extract SHACL node shapes with target declarations from parsed RDF.
+     *
+     * Uses a two-pass strategy:
+     * 1. First pass: discover shapes via W3C Section 2.1 rules (SHP-01 through SHP-04)
+     * 2. Second pass: discover implicit shapes referenced by shape-expecting predicates
      *
      * @return array<string, array<string, mixed>>
      */
@@ -100,6 +111,7 @@ final class ShaclShapeProcessor
         $graph = $parsedRdf->graph;
         $shapes = [];
 
+        // First pass: discover explicitly typed and predicate-recognized shapes
         foreach ($graph->resources() as $resource) {
             if (!$this->isShape($resource)) {
                 continue;
@@ -114,7 +126,48 @@ final class ShaclShapeProcessor
             $shapes[$uri] = $shape;
         }
 
+        // Second pass: discover implicit shapes referenced via shape-expecting predicates
+        $this->discoverImplicitShapes($graph, $shapes);
+
         return $shapes;
+    }
+
+    /**
+     * Discover shapes referenced by shape-expecting predicates that were not
+     * found in the first pass. Iterates until no new shapes are discovered.
+     *
+     * @param \EasyRdf\Graph $graph
+     * @param array<string, array<string, mixed>> $shapes
+     */
+    private function discoverImplicitShapes(\EasyRdf\Graph $graph, array &$shapes): void
+    {
+        $maxIterations = 10;
+
+        do {
+            $newShapesFound = false;
+
+            foreach ($graph->resources() as $resource) {
+                foreach (self::SHAPE_EXPECTING_PREDICATES as $predicate) {
+                    foreach ($resource->all($predicate) as $referencedShape) {
+                        if (!$referencedShape instanceof Resource) {
+                            continue;
+                        }
+
+                        $uri = $referencedShape->getUri();
+                        if ($uri === '' || $uri === '0' || str_starts_with($uri, '_:')) {
+                            continue;
+                        }
+
+                        if (isset($shapes[$uri])) {
+                            continue;
+                        }
+
+                        $shapes[$uri] = $this->extractShapeData($referencedShape);
+                        $newShapesFound = true;
+                    }
+                }
+            }
+        } while ($newShapesFound && --$maxIterations > 0);
     }
 
     /**
@@ -186,10 +239,11 @@ final class ShaclShapeProcessor
             'target_classes' => $targetClasses,
             'target_node' => $targetNodes !== [] ? $targetNodes[0] : null,
             'target_nodes' => $targetNodes,
-            'target_subjects_of' => $this->getResourceUriValue($resource, 'sh:targetSubjectsOf'),
-            'target_objects_of' => $this->getResourceUriValue($resource, 'sh:targetObjectsOf'),
+            'target_subjects_of' => $this->getResourceUriValues($resource, 'sh:targetSubjectsOf'),
+            'target_objects_of' => $this->getResourceUriValues($resource, 'sh:targetObjectsOf'),
             'property_shapes' => [],
-            'constraints' => [],
+            'constraints' => $this->extractNodeConstraints($resource),
+            'sparql_constraints' => $this->extractSparqlConstraints($resource),
             'severity' => $severityData['severity'],
             'severity_iri' => $severityData['severity_iri'],
             'message' => $messages !== [] ? $messages[0] : null,
@@ -377,25 +431,6 @@ final class ShaclShapeProcessor
     }
 
     /**
-     * Get a single URI value from a resource property.
-     */
-    private function getResourceUriValue(Resource $resource, string $property): ?string
-    {
-        /** @var Resource|Literal|null $value */
-        $value = $resource->get($property);
-
-        if ($value === null) {
-            return null;
-        }
-
-        if ($value instanceof Resource) {
-            return $value->getUri();
-        }
-
-        return (string) $value;
-    }
-
-    /**
      * Get all URI values from a resource property.
      *
      * @return list<string>
@@ -419,6 +454,290 @@ final class ShaclShapeProcessor
         }
 
         return $values;
+    }
+
+    /**
+     * Extract node-level constraints from a resource.
+     *
+     * Extracts sh:and, sh:or, sh:xone (RDF lists of shape URIs),
+     * sh:not (single shape URI), sh:closed (boolean), and
+     * sh:ignoredProperties (RDF list of property URIs).
+     *
+     * @return array<string, mixed>
+     */
+    private function extractNodeConstraints(Resource $resource): array
+    {
+        $constraints = [];
+
+        // Logical list constraints: sh:and, sh:or, sh:xone
+        foreach (['and', 'or', 'xone'] as $constraint) {
+            $shapes = $this->extractLogicalListConstraint($resource, 'sh:' . $constraint);
+            if ($shapes !== []) {
+                $constraints[$constraint] = $shapes;
+            }
+        }
+
+        // sh:not: single shape reference (not a list)
+        /** @var Resource|Literal|null $notValue */
+        $notValue = $resource->get('sh:not');
+        if ($notValue instanceof Resource) {
+            $notUri = $notValue->getUri();
+            if ($notUri !== '' && $notUri !== '0') {
+                $constraints['not'] = $notUri;
+            }
+        }
+
+        // sh:closed: boolean
+        /** @var Resource|Literal|null $closedValue */
+        $closedValue = $resource->get('sh:closed');
+        if ($closedValue !== null) {
+            if ($closedValue instanceof Literal) {
+                $raw = (string) $closedValue->getValue();
+                $isClosed = $raw === 'true' || $raw === '1';
+            } else {
+                $stringVal = (string) $closedValue;
+                $isClosed = $stringVal === 'true' || $stringVal === '1';
+            }
+            if ($isClosed) {
+                $constraints['closed'] = true;
+
+                // sh:ignoredProperties: RDF list of property URIs (only relevant when closed)
+                $ignoredProperties = $this->extractRdfListUris($resource, 'sh:ignoredProperties');
+                if ($ignoredProperties !== []) {
+                    $constraints['ignoredProperties'] = $ignoredProperties;
+                }
+            }
+        }
+
+        return $constraints;
+    }
+
+    /**
+     * Extract a logical list constraint (sh:and, sh:or, sh:xone) as array of shape URIs.
+     *
+     * @return list<string>
+     */
+    private function extractLogicalListConstraint(Resource $resource, string $property): array
+    {
+        /** @var Resource|Literal|null $listHead */
+        $listHead = $resource->get($property);
+
+        if (!$listHead instanceof Resource) {
+            return [];
+        }
+
+        if ($listHead->getUri() === self::RDF_NIL) {
+            return [];
+        }
+
+        return $this->collectRdfListUris($listHead);
+    }
+
+    /**
+     * Extract an RDF list of URIs from a property.
+     *
+     * @return list<string>
+     */
+    private function extractRdfListUris(Resource $resource, string $property): array
+    {
+        /** @var Resource|Literal|null $listHead */
+        $listHead = $resource->get($property);
+
+        if (!$listHead instanceof Resource) {
+            return [];
+        }
+
+        if ($listHead->getUri() === self::RDF_NIL) {
+            return [];
+        }
+
+        return $this->collectRdfListUris($listHead);
+    }
+
+    /**
+     * Collect URIs from an RDF list (rdf:first/rdf:rest chain).
+     *
+     * @return list<string>
+     */
+    private function collectRdfListUris(Resource $listNode): array
+    {
+        $uris = [];
+        $current = $listNode;
+        $maxIterations = 100;
+
+        do {
+            if ($current->getUri() === self::RDF_NIL) {
+                break;
+            }
+
+            /** @var Resource|Literal|null $first */
+            $first = $current->get('rdf:first');
+            if ($first instanceof Resource) {
+                $uri = $first->getUri();
+                if ($uri !== '' && $uri !== '0') {
+                    $uris[] = $uri;
+                }
+            } elseif ($first instanceof Literal) {
+                $uris[] = (string) $first->getValue();
+            }
+
+            /** @var Resource|Literal|null $rest */
+            $rest = $current->get('rdf:rest');
+            if (!$rest instanceof Resource) {
+                break;
+            }
+            $current = $rest;
+        } while (--$maxIterations > 0);
+
+        return $uris;
+    }
+
+    /**
+     * Extract SPARQL constraints (sh:sparql) from a resource.
+     *
+     * Each sh:sparql blank node may contain:
+     * - sh:select or sh:ask (query string)
+     * - sh:prefixes (reference to ontology with sh:declare)
+     * - sh:message (multilingual)
+     * - sh:deactivated (boolean, default false)
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function extractSparqlConstraints(Resource $resource): array
+    {
+        $constraints = [];
+
+        foreach ($resource->all('sh:sparql') as $sparqlResource) {
+            if (!$sparqlResource instanceof Resource) {
+                continue;
+            }
+
+            $constraint = $this->extractSingleSparqlConstraint($sparqlResource);
+            if ($constraint !== []) {
+                $constraints[] = $constraint;
+            }
+        }
+
+        return $constraints;
+    }
+
+    /**
+     * Extract a single SPARQL constraint from a blank node resource.
+     *
+     * @return array<string, mixed>
+     */
+    private function extractSingleSparqlConstraint(Resource $resource): array
+    {
+        $result = [];
+
+        // sh:select query
+        /** @var Resource|Literal|null $selectValue */
+        $selectValue = $resource->get('sh:select');
+        if ($selectValue instanceof Literal) {
+            $result['select'] = (string) $selectValue->getValue();
+        } elseif ($selectValue !== null) {
+            $result['select'] = (string) $selectValue;
+        }
+
+        // sh:ask query
+        /** @var Resource|Literal|null $askValue */
+        $askValue = $resource->get('sh:ask');
+        if ($askValue instanceof Literal) {
+            $result['ask'] = (string) $askValue->getValue();
+        } elseif ($askValue !== null) {
+            $result['ask'] = (string) $askValue;
+        }
+
+        // Must have at least a query
+        if (!isset($result['select']) && !isset($result['ask'])) {
+            return [];
+        }
+
+        // sh:message (multilingual)
+        $messages = $this->extractSparqlMessages($resource);
+        if ($messages !== []) {
+            $result['messages'] = $messages;
+        }
+
+        // sh:deactivated (native bool, default false)
+        $result['deactivated'] = $this->extractDeactivated($resource);
+
+        // sh:prefixes (resolve prefix declarations)
+        $prefixes = $this->extractSparqlPrefixes($resource);
+        if ($prefixes !== []) {
+            $result['prefixes'] = $prefixes;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Extract multilingual messages from a SPARQL constraint resource.
+     *
+     * @return array<string, string>
+     */
+    private function extractSparqlMessages(Resource $resource): array
+    {
+        $messages = [];
+
+        foreach ($resource->all('sh:message') as $value) {
+            if ($value instanceof Literal) {
+                $langKey = $this->getLiteralLangKey($value);
+                if (!isset($messages[$langKey])) {
+                    $messages[$langKey] = (string) $value->getValue();
+                }
+            }
+        }
+
+        return $messages;
+    }
+
+    /**
+     * Extract and resolve SPARQL prefix declarations from sh:prefixes.
+     *
+     * sh:prefixes points to a resource (typically owl:Ontology) that has
+     * sh:declare entries, each with sh:prefix (string) and sh:namespace (URI).
+     *
+     * @return array<string, string>
+     */
+    private function extractSparqlPrefixes(Resource $resource): array
+    {
+        $prefixes = [];
+
+        foreach ($resource->all('sh:prefixes') as $prefixesResource) {
+            if (!$prefixesResource instanceof Resource) {
+                continue;
+            }
+
+            foreach ($prefixesResource->all('sh:declare') as $declareResource) {
+                if (!$declareResource instanceof Resource) {
+                    continue;
+                }
+
+                /** @var Resource|Literal|null $prefixValue */
+                $prefixValue = $declareResource->get('sh:prefix');
+                /** @var Resource|Literal|null $namespaceValue */
+                $namespaceValue = $declareResource->get('sh:namespace');
+
+                if ($prefixValue === null || $namespaceValue === null) {
+                    continue;
+                }
+
+                $prefix = ($prefixValue instanceof Literal)
+                    ? (string) $prefixValue->getValue()
+                    : (string) $prefixValue;
+
+                $namespace = ($namespaceValue instanceof Literal)
+                    ? (string) $namespaceValue->getValue()
+                    : $namespaceValue->getUri();
+
+                if ($prefix !== '' && $namespace !== '') {
+                    $prefixes[$prefix] = $namespace;
+                }
+            }
+        }
+
+        return $prefixes;
     }
 
     /**

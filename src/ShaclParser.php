@@ -35,8 +35,9 @@ class ShaclParser extends RdfParser
         ParsedRdf $parsedRdf,
         RdfFormatHandlerInterface $handler,
         string $content,
+        array $options = [],
     ): ParsedOntology {
-        $base = parent::buildParsedOntology($parsedRdf, $handler, $content);
+        $base = parent::buildParsedOntology($parsedRdf, $handler, $content, $options);
 
         return $this->processShaclFeatures($base, $parsedRdf);
     }
@@ -69,6 +70,7 @@ class ShaclParser extends RdfParser
             restrictions: $base->restrictions,
             metadata: $base->metadata,
             rawContent: $base->rawContent,
+            graphs: $base->graphs,
         );
     }
 }

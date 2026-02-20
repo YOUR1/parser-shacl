@@ -65,7 +65,7 @@ describe('W3C SHACL Conformance - Target Declarations', function () {
         expect($result->shapes)->toHaveKey($shapeUri);
 
         $shape = $result->shapes[$shapeUri];
-        expect($shape['target_subjects_of'])->toBe('http://example.org/name');
+        expect($shape['target_subjects_of'])->toBe(['http://example.org/name']);
         expect($shape['label'])->toBe('Has Name Shape');
     });
 
@@ -77,7 +77,7 @@ describe('W3C SHACL Conformance - Target Declarations', function () {
         expect($result->shapes)->toHaveKey($shapeUri);
 
         $shape = $result->shapes[$shapeUri];
-        expect($shape['target_objects_of'])->toBe('http://example.org/knows');
+        expect($shape['target_objects_of'])->toBe(['http://example.org/knows']);
         expect($shape['label'])->toBe('Known By Shape');
     });
 

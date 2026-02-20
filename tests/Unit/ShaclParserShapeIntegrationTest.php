@@ -61,8 +61,8 @@ TTL;
         $shape = $result->shapes[$shapeUri];
         expect($shape['target_class'])->toBe('http://example.org/Person');
         expect($shape['target_node'])->toBe('http://example.org/Alice');
-        expect($shape['target_subjects_of'])->toBe('http://example.org/name');
-        expect($shape['target_objects_of'])->toBe('http://example.org/knows');
+        expect($shape['target_subjects_of'])->toBe(['http://example.org/name']);
+        expect($shape['target_objects_of'])->toBe(['http://example.org/knows']);
     });
 
     it('reflects implicit target classes in shapes', function () {

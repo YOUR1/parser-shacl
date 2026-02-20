@@ -309,6 +309,12 @@ final class ShaclPropertyAnalyzer
             $result['sh_not'] = $notConstraint;
         }
 
+        // sh:sparql constraints (SHACL-SPARQL extension, Section 5)
+        $sparqlConstraints = $this->extractSparqlConstraints($resource);
+        if ($sparqlConstraints !== []) {
+            $result['sparql_constraints'] = $sparqlConstraints;
+        }
+
         return $result;
     }
 
@@ -350,6 +356,9 @@ final class ShaclPropertyAnalyzer
     /**
      * Extract complex path (inverse, alternative, zeroOrMore, oneOrMore, zeroOrOne).
      *
+     * Supports nested paths: when the value of a path operator is a blank node
+     * with its own path predicates, it recurses to produce nested path structures.
+     *
      * @return array<string, mixed>|null
      */
     private function extractComplexPath(Resource $resource): ?array
@@ -358,7 +367,7 @@ final class ShaclPropertyAnalyzer
         /** @var Resource|Literal|null $inversePath */
         $inversePath = $resource->get('sh:inversePath');
         if ($inversePath instanceof Resource) {
-            return ['type' => 'inverse', 'path' => $inversePath->getUri()];
+            return ['type' => 'inverse', 'path' => $this->resolvePathValue($inversePath)];
         }
 
         // Alternative path
@@ -375,24 +384,41 @@ final class ShaclPropertyAnalyzer
         /** @var Resource|Literal|null $zeroOrMorePath */
         $zeroOrMorePath = $resource->get('sh:zeroOrMorePath');
         if ($zeroOrMorePath instanceof Resource) {
-            return ['type' => 'zeroOrMore', 'path' => $zeroOrMorePath->getUri()];
+            return ['type' => 'zeroOrMore', 'path' => $this->resolvePathValue($zeroOrMorePath)];
         }
 
         // One or more
         /** @var Resource|Literal|null $oneOrMorePath */
         $oneOrMorePath = $resource->get('sh:oneOrMorePath');
         if ($oneOrMorePath instanceof Resource) {
-            return ['type' => 'oneOrMore', 'path' => $oneOrMorePath->getUri()];
+            return ['type' => 'oneOrMore', 'path' => $this->resolvePathValue($oneOrMorePath)];
         }
 
         // Zero or one
         /** @var Resource|Literal|null $zeroOrOnePath */
         $zeroOrOnePath = $resource->get('sh:zeroOrOnePath');
         if ($zeroOrOnePath instanceof Resource) {
-            return ['type' => 'zeroOrOne', 'path' => $zeroOrOnePath->getUri()];
+            return ['type' => 'zeroOrOne', 'path' => $this->resolvePathValue($zeroOrOnePath)];
         }
 
         return null;
+    }
+
+    /**
+     * Resolve a path value resource: if it is a blank node with nested path
+     * operators, recurse into extractComplexPath; otherwise return its URI.
+     *
+     * @return string|array<string, mixed>
+     */
+    private function resolvePathValue(Resource $pathResource): string|array
+    {
+        // Try to resolve as a nested complex path first
+        $nested = $this->extractComplexPath($pathResource);
+        if ($nested !== null) {
+            return $nested;
+        }
+
+        return $pathResource->getUri();
     }
 
     /**
@@ -720,6 +746,162 @@ final class ShaclPropertyAnalyzer
         }
 
         return $data;
+    }
+
+    /**
+     * Extract SPARQL constraints (sh:sparql) from a property shape resource.
+     *
+     * Each sh:sparql blank node may contain:
+     * - sh:select or sh:ask (query string)
+     * - sh:prefixes (reference to ontology with sh:declare)
+     * - sh:message (multilingual)
+     * - sh:deactivated (boolean, default false)
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function extractSparqlConstraints(Resource $resource): array
+    {
+        $constraints = [];
+
+        foreach ($resource->all('sh:sparql') as $sparqlResource) {
+            if (!$sparqlResource instanceof Resource) {
+                continue;
+            }
+
+            $constraint = $this->extractSingleSparqlConstraint($sparqlResource);
+            if ($constraint !== []) {
+                $constraints[] = $constraint;
+            }
+        }
+
+        return $constraints;
+    }
+
+    /**
+     * Extract a single SPARQL constraint from a blank node resource.
+     *
+     * @return array<string, mixed>
+     */
+    private function extractSingleSparqlConstraint(Resource $resource): array
+    {
+        $result = [];
+
+        // sh:select query
+        $selectValue = $this->getLiteralValue($resource, 'sh:select');
+        if ($selectValue !== null) {
+            $result['select'] = $selectValue;
+        }
+
+        // sh:ask query
+        $askValue = $this->getLiteralValue($resource, 'sh:ask');
+        if ($askValue !== null) {
+            $result['ask'] = $askValue;
+        }
+
+        // Must have at least a query
+        if (!isset($result['select']) && !isset($result['ask'])) {
+            return [];
+        }
+
+        // sh:message (multilingual)
+        $messages = $this->extractSparqlMessages($resource);
+        if ($messages !== []) {
+            $result['messages'] = $messages;
+        }
+
+        // sh:deactivated (native bool, default false)
+        $result['deactivated'] = $this->extractSparqlDeactivated($resource);
+
+        // sh:prefixes (resolve prefix declarations)
+        $prefixes = $this->extractSparqlPrefixes($resource);
+        if ($prefixes !== []) {
+            $result['prefixes'] = $prefixes;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Extract multilingual messages from a SPARQL constraint resource.
+     *
+     * @return array<string, string>
+     */
+    private function extractSparqlMessages(Resource $resource): array
+    {
+        $messages = [];
+
+        foreach ($resource->all('sh:message') as $value) {
+            if ($value instanceof Literal) {
+                $lang = (string) $value->getLang();
+                $langKey = ($lang !== '') ? $lang : 'en';
+                if (!isset($messages[$langKey])) {
+                    $messages[$langKey] = (string) $value->getValue();
+                }
+            }
+        }
+
+        return $messages;
+    }
+
+    /**
+     * Extract the deactivated flag from a SPARQL constraint resource.
+     */
+    private function extractSparqlDeactivated(Resource $resource): bool
+    {
+        /** @var Resource|Literal|null $value */
+        $value = $resource->get('sh:deactivated');
+
+        if ($value === null) {
+            return false;
+        }
+
+        if ($value instanceof Literal) {
+            $raw = (string) $value->getValue();
+
+            return $raw === 'true' || $raw === '1';
+        }
+
+        return (string) $value === 'true';
+    }
+
+    /**
+     * Extract and resolve SPARQL prefix declarations from sh:prefixes.
+     *
+     * @return array<string, string>
+     */
+    private function extractSparqlPrefixes(Resource $resource): array
+    {
+        $prefixes = [];
+
+        foreach ($resource->all('sh:prefixes') as $prefixesResource) {
+            if (!$prefixesResource instanceof Resource) {
+                continue;
+            }
+
+            foreach ($prefixesResource->all('sh:declare') as $declareResource) {
+                if (!$declareResource instanceof Resource) {
+                    continue;
+                }
+
+                $prefix = $this->getLiteralValue($declareResource, 'sh:prefix');
+                /** @var Resource|Literal|null $nsValue */
+                $nsValue = $declareResource->get('sh:namespace');
+
+                if ($prefix === null || $nsValue === null) {
+                    continue;
+                }
+
+                $namespace = ($nsValue instanceof Literal)
+                    ? (string) $nsValue->getValue()
+                    : $nsValue->getUri();
+
+                if ($prefix !== '' && $namespace !== '') {
+                    $prefixes[$prefix] = $namespace;
+                }
+            }
+        }
+
+        return $prefixes;
     }
 
     /**

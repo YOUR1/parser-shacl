@@ -238,7 +238,7 @@ ex:HasNameShape a sh:NodeShape ;
     sh:targetSubjectsOf ex:name .';
             $result = $this->parser->parse($content);
             $shapeUri = 'http://example.org/HasNameShape';
-            expect($result->shapes[$shapeUri]['target_subjects_of'])->toBe('http://example.org/name');
+            expect($result->shapes[$shapeUri]['target_subjects_of'])->toBe(['http://example.org/name']);
         });
 
         it('extracts sh:targetObjectsOf value', function () {
@@ -248,7 +248,7 @@ ex:KnowsObjectShape a sh:NodeShape ;
     sh:targetObjectsOf ex:knows .';
             $result = $this->parser->parse($content);
             $shapeUri = 'http://example.org/KnowsObjectShape';
-            expect($result->shapes[$shapeUri]['target_objects_of'])->toBe('http://example.org/knows');
+            expect($result->shapes[$shapeUri]['target_objects_of'])->toBe(['http://example.org/knows']);
         });
 
         it('extracts multiple targeting mechanisms on same shape', function () {
@@ -263,8 +263,8 @@ ex:MultiShape a sh:NodeShape ;
             $shapeUri = 'http://example.org/MultiShape';
             expect($result->shapes[$shapeUri]['target_class'])->toBe('http://example.org/Person');
             expect($result->shapes[$shapeUri]['target_node'])->toBe('http://example.org/Alice');
-            expect($result->shapes[$shapeUri]['target_subjects_of'])->toBe('http://example.org/name');
-            expect($result->shapes[$shapeUri]['target_objects_of'])->toBe('http://example.org/knows');
+            expect($result->shapes[$shapeUri]['target_subjects_of'])->toBe(['http://example.org/name']);
+            expect($result->shapes[$shapeUri]['target_objects_of'])->toBe(['http://example.org/knows']);
         });
 
         it('extracts property shapes with sh:path from node shape', function () {
