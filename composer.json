@@ -30,7 +30,7 @@
         }
     },
     "scripts": {
-        "test": "vendor/bin/pest --colors=always",
+        "test": "vendor/bin/pest --colors=always --coverage-clover=coverage.xml",
         "analyse": "vendor/bin/phpstan analyse --no-progress"
     },
     "config": {
